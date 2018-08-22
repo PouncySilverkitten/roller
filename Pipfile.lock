@@ -1,0 +1,25 @@
+{
+    "_meta": {
+        "hash": {
+            "sha256": "bc35a9411933b847dea8b536de8b2c73b1eeead1a835d5e72df0b59ca7a47bfb"
+        },
+        "pipfile-spec": 6,
+        "requires": {
+            "python_version": "3.6"
+        },
+        "sources": [
+            {
+                "name": "pypi",
+                "url": "https://pypi.org/simple",
+                "verify_ssl": true
+            }
+        ]
+    },
+    "default": {
+        "karelia": {
+            "git": "https://github.com/pouncysilverkitten/karelia",
+            "ref": "216695181d720f428420c343c400a9cfa46686d0"
+        }
+    },
+    "develop": {}
+}
