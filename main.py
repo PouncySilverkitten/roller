@@ -27,16 +27,17 @@ def parse(roll_text):
         if roll_text == "disadv":
             rolls = 2
             dice = 20
-            mod = None
+            mod = 0
 
         # Complex disadvantage
         else:
             # Check to see if a modifier is included
             try:
                 roll, mod = roll_text.split('+')
+                mod = int(mod)
             except ValueError:
                 roll = roll_text
-                mod = None
+                mod = 0
 
             # Split into dice type and number of rolls
             try:
@@ -45,26 +46,30 @@ def parse(roll_text):
                 return "Unparsable command {roll_text}."
             
         roll_output = sorted([random.randint(1, int(dice)) for _ in range(int(rolls))])
-        if mod is not None:
-            mod = f" + {mod}: {roll_output[0] + int(mod)}"
-        else:
-            mod = ''
-            
-        return(f"{', '.join([str(res) for res in roll_output])}: {roll_output[0]}{mod}")
 
+        if mod > 0:
+            mod_text = f" + mod{mod}"
+        else:
+            mod_text = ''
+            
+        output = f"Result {roll_output[0]+mod}: {', '.join([str(res) for res in roll_output])}{mod_text}"
+        return output
+
+    # Advantages
     elif "ad" in roll_text or roll_text == "adv":
         if roll_text == "adv":
             rolls = 2
             dice = 20
-            mod = None
+            mod = 0
             
         else:
             # Check to see if a modifier is included
             try:
                 roll, mod = roll_text.split('+')
+                mod = int(mod)
             except ValueError:
                 roll = roll_text
-                mod = None
+                mod = 0
 
             # Split into dice type and number of rolls
             try:
@@ -73,20 +78,20 @@ def parse(roll_text):
                 return "Unparsable command {roll_text}."
             
         roll_output = sorted([random.randint(1, int(dice)) for _ in range(int(rolls))], reverse=True)
-        if mod is not None:
-            mod = f" + {mod}: {roll_output[0] + int(mod)}"
+
+        if isinstance(mod, int):
+            mod_text = f" + mod{mod}"
         else:
-            mod = ''
-            
-        return(f"{', '.join([str(res) for res in roll_output])}: {roll_output[0]}{mod}")
-
-
+            mod_text = ''
+        output = f"Result {roll_output[0]+mod}: {', '.join([str(res) for res in roll_output])}{mod_text}"
+        return output
+    
     try:
         roll, mod = roll_text.split('+')
         mod = int(mod)
     except ValueError:
         roll = roll_text
-        mod = None
+        mod = 0
 
     try:
         rolls, dice = roll.split('d')
@@ -96,6 +101,14 @@ def parse(roll_text):
         
     if rolls == '': rolls = 1
     if dice == '': dice = 20
+
+    rolls = int(rolls)
+    dice = int(dice)
+
+    if not 0 < rolls <= 20:
+        return "You can have 1-20 rolls inclusive."
+    if not 0 < dice <= 20:
+        return "You can roll die of 1-20 sides inclusive."
     
     try:
         roll_output = [random.randint(1, int(dice)) for _ in range(int(rolls))]
@@ -103,10 +116,10 @@ def parse(roll_text):
         return("That made *no* sense...")
         
     if isinstance(mod, int):
-        mod = f" + {mod}: {sum(roll_output) + int(mod)}"
+        mod_text = f" + mod{mod}"
     else:
-        mod = ''
-    output = f"{', '.join([str(res) for res in roll_output])}: {sum(roll_output)}{mod}"
+        mod_text = ''
+    output = f"Total {sum(roll_output)+mod}: {', '.join([str(res) for res in roll_output])}{mod_text}"
 
     return output
 
@@ -143,10 +156,15 @@ while True:
                     # Load up and check command against saved rolls
                     saved_rolls = get_saved_rolls()
                     if msg.data.content.split()[1] in saved_rolls.keys():
-                        roller.reply(parse(saved_rolls[msg.data.content.split()[1]]))
-                        
-                    
-                    roller.reply(parse(msg.data.content.split()[1]))
+                        try:
+                            roller.reply(parse(saved_rolls[msg.data.content.split()[1]]))
+                        except:
+                            roller.reply(f"Sorry, couldn't parse roll {msg.data.content.split()[1]}.")
+                    else:
+                        try:
+                            roller.reply(parse(msg.data.content.split()[1]))
+                        except:
+                            roller.reply(f"Sorry, couldn't parse roll {msg.data.content.split()[1]}.")
 
                 # Allows rolls to be named and saved
                 elif msg.data.content.split()[0] == '!save':
