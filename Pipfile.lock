@@ -1,11 +1,11 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "bc35a9411933b847dea8b536de8b2c73b1eeead1a835d5e72df0b59ca7a47bfb"
+            "sha256": "0e56801738b590faa01ed2f49fa26bb61530872a5af3240b74501f9bbf4e5e58"
         },
         "pipfile-spec": 6,
         "requires": {
-            "python_version": "3.6"
+            "python_version": "3.7"
         },
         "sources": [
             {
@@ -17,8 +17,26 @@
     },
     "default": {
         "karelia": {
-            "git": "https://github.com/pouncysilverkitten/karelia",
-            "ref": "216695181d720f428420c343c400a9cfa46686d0"
+            "hashes": [
+                "sha256:5df450131e27d9da038dc0ff990594e2f56cc1db0926e89b4f91f3647437fb0a",
+                "sha256:892ce0ce65c4db917257d2829ebca866c7b6ef645bae1f1927abb899c9f4f235"
+            ],
+            "index": "pypi",
+            "version": "==2.0.7"
+        },
+        "six": {
+            "hashes": [
+                "sha256:70e8a77beed4562e7f14fe23a786b54f6296e34344c23bc42f07b15018ff98e9",
+                "sha256:832dc0e10feb1aa2c68dcc57dbb658f1c7e65b9b61af69048abc87a2db00a0eb"
+            ],
+            "version": "==1.11.0"
+        },
+        "websocket-client": {
+            "hashes": [
+                "sha256:030bbfbf29ac9e315ffb207ed5ed42b6981b5038ea00d1e13b02b872cc95e8f6",
+                "sha256:a35bac3d9647c62c1ba3e8a7340385d92981f5486b033557d592138fd4b21b90"
+            ],
+            "version": "==0.51.0"
         }
     },
     "develop": {}

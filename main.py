@@ -1,8 +1,10 @@
-import karelia
+import json
 import random
 import sys
 import time
-import json
+
+import karelia
+
 
 def get_saved_rolls():
     with open('saved_rolls.json') as f:
@@ -44,15 +46,15 @@ def parse(roll_text):
                 rolls, dice = roll.split('dd')
             except:
                 return "Unparsable command {roll_text}."
-            
+
         roll_output = sorted([random.randint(1, int(dice)) for _ in range(int(rolls))])
 
         if mod > 0:
-            mod_text = f" + mod{mod}"
+            mod_text = f" + {mod}"
         else:
             mod_text = ''
-            
-        output = f"Result {roll_output[0]+mod}: {', '.join([str(res) for res in roll_output])}{mod_text}"
+
+        output = f"{roll_output[0]+mod}: {', '.join([str(res) for res in roll_output])}{mod_text}"
         return output
 
     # Advantages
@@ -61,7 +63,7 @@ def parse(roll_text):
             rolls = 2
             dice = 20
             mod = 0
-            
+
         else:
             # Check to see if a modifier is included
             try:
@@ -76,14 +78,14 @@ def parse(roll_text):
                 rolls, dice = roll.split('ad')
             except:
                 return "Unparsable command {roll_text}."
-            
+
         roll_output = sorted([random.randint(1, int(dice)) for _ in range(int(rolls))], reverse=True)
 
-        if isinstance(mod, int):
-            mod_text = f" + mod{mod}"
+        if mod > 0:
+            mod_text = f" + {mod}"
         else:
             mod_text = ''
-        output = f"Result {roll_output[0]+mod}: {', '.join([str(res) for res in roll_output])}{mod_text}"
+        output = f"{roll_output[0]+mod}: {', '.join([str(res) for res in roll_output])}{mod_text}"
         return output
     
     try:
@@ -115,16 +117,16 @@ def parse(roll_text):
     except ValueError:
         return("That made *no* sense...")
         
-    if isinstance(mod, int):
-        mod_text = f" + mod{mod}"
+    if mod > 0:
+        mod_text = f" + {mod}"
     else:
         mod_text = ''
-    output = f"Total {sum(roll_output)+mod}: {', '.join([str(res) for res in roll_output])}{mod_text}"
+    output = f"{sum(roll_output)+mod}: {', '.join([str(res) for res in roll_output])}{mod_text}"
 
     return output
 
 
-roller = karelia.bot('Roller', 'test')
+roller = karelia.bot('Roller', 'dnd')
 roller.stock_responses['long_help'] = """I roll dice.
 You can invoke a roll with !roll, !r, /roll and /r.
 The following syntax simply rolls 1 D20: !r 1d20
@@ -138,7 +140,7 @@ For a 2d20 disadvantage roll, !r disadv.
 For an complex advantage roll, !r 2ad20(+10).
 For a complex disadvantage roll, !r 2dd20(+10).
 
-Save a formula: !save staff = 2d20+5
+Save a formula: !save staff 2d20+5
 Run a formula: !roll staff
 See a list of saved formulae: !list saved
 Delete a formula: !rm staff
@@ -151,36 +153,56 @@ while True:
         while True:
             msg = roller.parse()
             if msg.type == "send-event":
+
                 if msg.data.content.split()[0] in ['!roll', '!r', '/roll', '/r']:
 
                     # Load up and check command against saved rolls
                     saved_rolls = get_saved_rolls()
-                    if msg.data.content.split()[1] in saved_rolls.keys():
+                    roll_cat = msg.data.sender.name
+                    roll_name = msg.data.content.split()[1]
+                    if roll_cat in saved_rolls and roll_name in saved_rolls[roll_cat]:
                         try:
-                            roller.reply(parse(saved_rolls[msg.data.content.split()[1]]))
+                            roller.reply(parse(saved_rolls[roll_cat][roll_name]))
                         except:
                             roller.reply(f"Sorry, couldn't parse roll {msg.data.content.split()[1]}.")
                     else:
                         try:
-                            roller.reply(parse(msg.data.content.split()[1]))
+                            roller.reply(parse(roll_name))
                         except:
                             roller.reply(f"Sorry, couldn't parse roll {msg.data.content.split()[1]}.")
 
                 # Allows rolls to be named and saved
                 elif msg.data.content.split()[0] == '!save':
-                    roll_name = msg.data.content.split()[1]
-                    roll_formula = msg.data.content.split()[3]
-                    
-                    saved_rolls = get_saved_rolls()
-                    saved_rolls[roll_name] = roll_formula
-                    write_saved_rolls(saved_rolls)
-                    
-                    roller.reply(f"Saved roll {roll_name}, corresponding to {roll_formula}.")
+                    if len(msg.data.content.split()) == 3:
+                        roll_name = msg.data.content.split()[2]
+                        roll_formula = msg.data.content.split()[1]
+                        try:
+                            parse(roll_formula) 
+                        except:
+                            roller.reply("Syntax is !save 2d20+2 name")
+                            continue
+
+                        saved_rolls = get_saved_rolls()
+                        roll_cat = msg.data.sender.name
+                        if roll_cat not in saved_rolls:
+                            saved_rolls[roll_cat] = {}
+                        saved_rolls[roll_cat][roll_name] = roll_formula
+                        write_saved_rolls(saved_rolls)
+                        roller.reply(f"Saved roll {roll_name}, corresponding to {roll_formula}.")
+                    else:
+                        roller.reply("Syntax is !save 2d20+2 name")
+                        continue
 
                 # List saved rolls
                 elif msg.data.content == "!list saved":
                     saved_rolls = get_saved_rolls()
-                    roller.reply("\n".join([f"{key}: {value}" for key, value in saved_rolls.items()]))
+                    reply = ""
+                    for key in saved_rolls:
+                        reply += f"{key}:\n"
+                        for _key, value in saved_rolls[key].items():
+                            reply += f"    {_key}: {value}\n"
+                        reply += "\n"
+                    roller.reply(reply)
 
                 # Delete saved rolls
                 elif msg.data.content.startswith('!rm '):
@@ -199,5 +221,3 @@ while True:
         roller.disconnect()
     finally:
         time.sleep(1)
-    
-            
