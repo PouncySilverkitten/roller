@@ -104,7 +104,7 @@ def parse(part):
     # Sanity check
     if p == [] or int(p[0]) < 1:
         raise RollsTooLow
-    elif int(p[1]) < 4:
+    elif int(p[1]) < 2:
         raise SidesTooLow
     elif int(p[0]) > 20:
         raise RollsTooHigh
