@@ -241,7 +241,7 @@ def main():
                         for key in saved_rolls:
                             reply += "{key}:\n".format(key)
                             for _key, value in saved_rolls[key].items():
-                                reply += f"    {}: {}\n".format(_key, value)
+                                reply += "    {}: {}\n".format(_key, value)
                             reply += "\n"
                         roller.reply(reply)
 
