@@ -198,19 +198,38 @@ def main():
                         if len(msg.data.content.split()) == 3:
                             roll_name = msg.data.content.split()[2]
                             roll_formula = msg.data.content.split()[1]
-                            try:
-                                parse(roll_formula) 
-                            except:
-                                roller.reply("Syntax is !save 2d20+2 name")
-                                continue
 
-                            saved_rolls = get_saved_rolls()
-                            roll_cat = msg.data.sender.name
-                            if roll_cat not in saved_rolls:
-                                saved_rolls[roll_cat] = {}
-                            saved_rolls[roll_cat][roll_name] = roll_formula
-                            write_saved_rolls(saved_rolls)
-                            roller.reply(f"Saved roll {roll_name}, corresponding to {roll_formula}.")
+                            try:
+                                frags = sep(roll_formula)
+                                saved = get_saved_rolls()
+                                sender = msg.data.sender.name
+                                looked_up = [lookup(saved, frag, sender) for frag in frags]
+                                assembler(looked_up)
+
+                                saved_rolls = get_saved_rolls()
+                                roll_cat = msg.data.sender.name
+                                if roll_cat not in saved_rolls:
+                                    saved_rolls[roll_cat] = {}
+                                saved_rolls[roll_cat][roll_name] = roll_formula
+                                write_saved_rolls(saved_rolls)
+                                reply = "Saved roll {}, corresponding to {}.".format(roll_name, roll_formula)
+
+                            except SidesTooHigh:
+                                reply = "Sorry, the max number of sides is 100."
+                            except SidesTooLow:
+                                reply = "Sorry, your dice must have at least 4 sides."
+
+                            except RollsTooHigh:
+                                reply = "Sorry, the max number of rolls is 20."
+                            except RollsTooLow:
+                                reply = "Sorry, you need to roll at least one die."
+
+                            except BadRollSyntax:
+                                reply = "Sorry, couldn't interpret that roll."
+
+                            finally:
+                                roller.reply(reply)
+
                         else:
                             roller.reply("Syntax is !save 2d20+2 name")
                             continue
