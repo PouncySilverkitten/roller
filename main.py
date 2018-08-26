@@ -1,132 +1,145 @@
+import doctest
 import json
 import random
+import re
 import sys
 import time
+from itertools import filterfalse
 
 import karelia
 
+
+class RollsTooHigh(Exception): pass
+class RollsTooLow(Exception): pass
+
+class SidesTooHigh(Exception): pass
+class SidesTooLow(Exception): pass
+
+class BadRollSyntax(Exception): pass
 
 def get_saved_rolls():
     with open('saved_rolls.json') as f:
         saved_rolls = json.loads(f.read())
     return saved_rolls
 
+
 def write_saved_rolls(saved_rolls):
     with open('saved_rolls.json', 'w') as f:
         f.write(json.dumps(saved_rolls))
 
-def parse(roll_text):
+
+def sep(rolls):
     """
-    >>> result = parse(2d8+10)
-    >>> 11 < result < 27
-    True
-
+    >>> sep('2d20')
+    ['2d20']
+    >>> sep('2d20+2')
+    ['2d20', '+', '2']
+    >>> sep('2d20-3')
+    ['2d20', '-', '3']
+    >>> sep('2d20+6d4')
+    ['2d20', '+', '6d4']
+    >>> sep('2d20-2+2d6-3')
+    ['2d20', '-', '2', '+', '2d6', '-', '3']
+    >>> sep('2d20-2d6-2-4')
+    ['2d20', '-', '2d6', '-', '2', '-', '4']
     """
 
-    # Disadvantage rolls
-    if "dd" in roll_text or roll_text == "disadv":
-        # Simple 2d20 disadvantage
-        if roll_text == "disadv":
-            rolls = 2
-            dice = 20
-            mod = 0
+    flatten = lambda l: [item for sublist in l for item in sublist]
 
-        # Complex disadvantage
-        else:
-            # Check to see if a modifier is included
-            try:
-                roll, mod = roll_text.split('+')
-                mod = int(mod)
-            except ValueError:
-                roll = roll_text
-                mod = 0
+    all_bits = []
 
-            # Split into dice type and number of rolls
-            try:
-                rolls, dice = roll.split('dd')
-            except:
-                return "Unparsable command {roll_text}."
+    pos_bits = flatten([['+', roll] for roll in rolls.split('+')])[1:] 
+    for bit in pos_bits:
+        if '-' not in bit:
+            all_bits.append(bit)
+            continue
+        spl = bit.split('-')
+        all_bits.append(spl[0])
+        for i in range(1, len(spl)):
+            all_bits.append('-')
+            all_bits.append(spl[i])
 
-        roll_output = sorted([random.randint(1, int(dice)) for _ in range(int(rolls))])
+    return all_bits
 
-        if mod > 0:
-            mod_text = f" + {mod}"
-        else:
-            mod_text = ''
 
-        output = f"{roll_output[0]+mod}: {', '.join([str(res) for res in roll_output])}{mod_text}"
-        return output
+def lookup(saved_rolls, roll, sender):
+    """
+    >>> saved = {'Irinora': {'staff': '2d20+2', 'amulet': '2d10-1'}, 'Verasar Alamelis': {'staff': '4d8+3', 'amulet': '3d6+4'}}
+    >>> lookup(saved, 'staff', 'Akunusella')
+    'staff'
+    >>> lookup(saved, 'trinket', 'Vexildah')
+    'trinket'
+    >>> lookup(saved, 'amulet', 'Verasar Alamelis')
+    '3d6+4'
+    >>> lookup(saved, 'adv', '')
+    '2ad20'
+    >>> lookup(saved, 'disadv', '')
+    '2dd20'
+    """
 
-    # Advantages
-    elif "ad" in roll_text or roll_text == "adv":
-        if roll_text == "adv":
-            rolls = 2
-            dice = 20
-            mod = 0
-
-        else:
-            # Check to see if a modifier is included
-            try:
-                roll, mod = roll_text.split('+')
-                mod = int(mod)
-            except ValueError:
-                roll = roll_text
-                mod = 0
-
-            # Split into dice type and number of rolls
-            try:
-                rolls, dice = roll.split('ad')
-            except:
-                return "Unparsable command {roll_text}."
-
-        roll_output = sorted([random.randint(1, int(dice)) for _ in range(int(rolls))], reverse=True)
-
-        if mod > 0:
-            mod_text = f" + {mod}"
-        else:
-            mod_text = ''
-        output = f"{roll_output[0]+mod}: {', '.join([str(res) for res in roll_output])}{mod_text}"
-        return output
-    
-    try:
-        roll, mod = roll_text.split('+')
-        mod = int(mod)
-    except ValueError:
-        roll = roll_text
-        mod = 0
+    if roll == 'adv':
+        return '2ad20'
+    elif roll == 'disadv':
+        return '2dd20'
 
     try:
-        rolls, dice = roll.split('d')
-    except ValueError:
-        rolls = 1
-        dice = roll
-        
-    if rolls == '': rolls = 1
-    if dice == '': dice = 20
+        return saved_rolls[sender][roll]
+    except KeyError:
+        return roll
 
-    rolls = int(rolls)
-    dice = int(dice)
 
-    if not 0 < rolls <= 20:
-        return "You can have 1-20 rolls inclusive."
-    if not 0 < dice <= 20:
-        return "You can roll die of 1-20 sides inclusive."
-    
+def parse(part):
+    p = list(filter(None, re.split("a|d", part)))
+    # If int
     try:
-        roll_output = [random.randint(1, int(dice)) for _ in range(int(rolls))]
+        if 'd' not in part and len(p) == 1: return (int(p[0]), p[0])
+
+        # If no number of rolls specified
+        if len(p) == 1: p = [1, p[0]]
+        p = list(map(int, p))
     except ValueError:
-        return("That made *no* sense...")
-        
-    if mod > 0:
-        mod_text = f" + {mod}"
+        raise BadRollSyntax
+
+    # Sanity check
+    if p == [] or int(p[0]) < 1:
+        raise RollsTooLow
+    elif int(p[1]) < 4:
+        raise SidesTooLow
+    elif int(p[0]) > 20:
+        raise RollsTooHigh
+    elif int(p[1]) > 100:
+        raise SidesTooHigh
+    rolls = sorted([random.randint(1, p[1]) for _ in range(p[0])])
+    if 'dd' in part:
+        total = rolls[0]
+    elif "ad" in part:
+        total = rolls[-1]
     else:
-        mod_text = ''
-    output = f"{sum(roll_output)+mod}: {', '.join([str(res) for res in roll_output])}{mod_text}"
+        total = sum(rolls)
 
-    return output
+    return (total, ', '.join([str(r) for r in rolls]),)
+
+def assembler(roll_parts):
+    output = "{}: "
+    parsed = parse(roll_parts[0])
+    total = parsed[0]
+    output += "({})".format(str(parsed[1]))
+    i = 1
+    while i < len(roll_parts):
+        # Possibilities are roll, +, -, int
+        parsed = parse(roll_parts[i+1])
+        total += parsed[0]
+        if roll_parts[i] == '-':
+            output += " - ({})".format(parsed[1])
+        else:
+            output += " + ({})".format(parsed[1])
+
+        i += 2
+
+    return output.format(total)
 
 
-roller = karelia.bot('Roller', 'dnd')
+roller = karelia.bot('Roller', 'test')
 roller.stock_responses['long_help'] = """I roll dice.
 You can invoke a roll with !roll, !r, /roll and /r.
 The following syntax simply rolls 1 D20: !r 1d20
@@ -147,77 +160,90 @@ Delete a formula: !rm staff
 
 Pouncy referenced this webpage while creating this bot: http://dnd.wizards.com/products/tabletop/players-basic-rules"""
 
-while True:
-    try:
-        roller.connect()
-        while True:
-            msg = roller.parse()
-            if msg.type == "send-event":
+def main():
+    while True:
+        try:
+            roller.connect()
+            while True:
+                msg = roller.parse()
+                if msg.type == "send-event":
 
-                if msg.data.content.split()[0] in ['!roll', '!r', '/roll', '/r']:
+                    if msg.data.content.split()[0] in ['!roll', '!r', '/roll', '/r']:
+                        reply = ""
+                        try:
+                            frags = sep(msg.data.content.split()[1])
+                            saved = get_saved_rolls()
+                            sender = msg.data.sender.name
+                            looked_up = [lookup(saved, frag, sender) for frag in frags]
+                            reply = assembler(looked_up)
 
-                    # Load up and check command against saved rolls
-                    saved_rolls = get_saved_rolls()
-                    roll_cat = msg.data.sender.name
-                    roll_name = msg.data.content.split()[1]
-                    if roll_cat in saved_rolls and roll_name in saved_rolls[roll_cat]:
-                        try:
-                            roller.reply(parse(saved_rolls[roll_cat][roll_name]))
-                        except:
-                            roller.reply(f"Sorry, couldn't parse roll {msg.data.content.split()[1]}.")
-                    else:
-                        try:
-                            roller.reply(parse(roll_name))
-                        except:
-                            roller.reply(f"Sorry, couldn't parse roll {msg.data.content.split()[1]}.")
+                        except SidesTooHigh:
+                            reply = "Sorry, the max number of sides is 100."
+                        except SidesTooLow:
+                            reply = "Sorry, your dice must have at least 4 sides."
 
-                # Allows rolls to be named and saved
-                elif msg.data.content.split()[0] == '!save':
-                    if len(msg.data.content.split()) == 3:
-                        roll_name = msg.data.content.split()[2]
-                        roll_formula = msg.data.content.split()[1]
-                        try:
-                            parse(roll_formula) 
-                        except:
+                        except RollsTooHigh:
+                            reply = "Sorry, the max number of rolls is 20."
+                        except RollsTooLow:
+                            reply = "Sorry, you need to roll at least one die."
+
+                        except BadRollSyntax:
+                            reply = "Sorry, couldn't interpret that roll."
+
+                        finally:
+                            roller.reply(reply)
+
+                    # Allows rolls to be named and saved
+                    elif msg.data.content.split()[0] == '!save':
+                        if len(msg.data.content.split()) == 3:
+                            roll_name = msg.data.content.split()[2]
+                            roll_formula = msg.data.content.split()[1]
+                            try:
+                                parse(roll_formula) 
+                            except:
+                                roller.reply("Syntax is !save 2d20+2 name")
+                                continue
+
+                            saved_rolls = get_saved_rolls()
+                            roll_cat = msg.data.sender.name
+                            if roll_cat not in saved_rolls:
+                                saved_rolls[roll_cat] = {}
+                            saved_rolls[roll_cat][roll_name] = roll_formula
+                            write_saved_rolls(saved_rolls)
+                            roller.reply(f"Saved roll {roll_name}, corresponding to {roll_formula}.")
+                        else:
                             roller.reply("Syntax is !save 2d20+2 name")
                             continue
 
+                    # List saved rolls
+                    elif msg.data.content == "!list saved":
                         saved_rolls = get_saved_rolls()
-                        roll_cat = msg.data.sender.name
-                        if roll_cat not in saved_rolls:
-                            saved_rolls[roll_cat] = {}
-                        saved_rolls[roll_cat][roll_name] = roll_formula
-                        write_saved_rolls(saved_rolls)
-                        roller.reply(f"Saved roll {roll_name}, corresponding to {roll_formula}.")
-                    else:
-                        roller.reply("Syntax is !save 2d20+2 name")
-                        continue
+                        reply = ""
+                        for key in saved_rolls:
+                            reply += f"{key}:\n"
+                            for _key, value in saved_rolls[key].items():
+                                reply += f"    {_key}: {value}\n"
+                            reply += "\n"
+                        roller.reply(reply)
 
-                # List saved rolls
-                elif msg.data.content == "!list saved":
-                    saved_rolls = get_saved_rolls()
-                    reply = ""
-                    for key in saved_rolls:
-                        reply += f"{key}:\n"
-                        for _key, value in saved_rolls[key].items():
-                            reply += f"    {_key}: {value}\n"
-                        reply += "\n"
-                    roller.reply(reply)
+                    # Delete saved rolls
+                    elif msg.data.content.startswith('!rm '):
+                        saved_rolls = get_saved_rolls()
+                        try:
+                            del saved_rolls[msg.data.content.split()[1]]
+                            write_saved_rolls(saved_rolls)
+                            roller.reply("Deleted.")
+                        except:
+                            roller.reply("Sorry, couldn't delete it.")
 
-                # Delete saved rolls
-                elif msg.data.content.startswith('!rm '):
-                    saved_rolls = get_saved_rolls()
-                    try:
-                        del saved_rolls[msg.data.content.split()[1]]
-                        write_saved_rolls(saved_rolls)
-                        roller.reply("Deleted.")
-                    except:
-                        roller.reply("Sorry, couldn't delete it.")
+        except KeyboardInterrupt:
+            sys.exit(0)
+        except:
+            roller.log()
+            roller.disconnect()
+        finally:
+            time.sleep(1)
 
-    except KeyboardInterrupt:
-        sys.exit(0)
-    except:
-        roller.log()
-        roller.disconnect()
-    finally:
-        time.sleep(1)
+if __name__ == "__main__":
+    #doctest.testmod()
+    main()
