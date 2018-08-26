@@ -44,7 +44,6 @@ def sep(rolls):
     ['2d20', '-', '2d6', '-', '2', '-', '4']
     """
 
-    flatten = lambda l: [item for sublist in l for item in sublist]
 
     all_bits = []
 
@@ -60,6 +59,8 @@ def sep(rolls):
             all_bits.append(spl[i])
 
     return all_bits
+
+flatten = lambda l: [item for sublist in l for item in sublist]
 
 
 def lookup(saved_rolls, roll, sender):
@@ -146,7 +147,7 @@ You can invoke a roll with !roll, !r, /roll and /r.
 The following syntax simply rolls 1 D20: !r 1d20
 The number of rolls defaults to 1, and the dice type to D20.
 
-A modifier can be added with !r 1d20+2. (Please note, in the case of a negative modifier, it should be expressed as !1d20+-2.)
+A modifier can be added with !r 1d20+2.
 
 For a 2d20 advantage roll, !r adv.
 For a 2d20 disadvantage roll, !r disadv.
@@ -154,7 +155,7 @@ For a 2d20 disadvantage roll, !r disadv.
 For an complex advantage roll, !r 2ad20(+10).
 For a complex disadvantage roll, !r 2dd20(+10).
 
-Save a formula: !save staff 2d20+5
+Save a formula: !save 2d20+5 staff
 Run a formula: !roll staff
 See a list of saved formulae: !list saved
 Delete a formula: !rm staff
@@ -175,7 +176,7 @@ def main():
                             frags = sep(msg.data.content.split()[1])
                             saved = get_saved_rolls()
                             sender = msg.data.sender.name
-                            looked_up = [lookup(saved, frag, sender) for frag in frags]
+                            looked_up = flatten([sep(lookup(saved, frag, sender)) for frag in frags])
                             reply = assembler(looked_up)
 
                         except SidesTooHigh:
@@ -240,7 +241,7 @@ def main():
                         saved_rolls = get_saved_rolls()
                         reply = ""
                         for key in saved_rolls:
-                            reply += "{key}:\n".format(key)
+                            reply += "{}:\n".format(key)
                             for _key, value in saved_rolls[key].items():
                                 reply += "    {}: {}\n".format(_key, value)
                             reply += "\n"
