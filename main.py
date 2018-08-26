@@ -128,10 +128,11 @@ def assembler(roll_parts):
     while i < len(roll_parts):
         # Possibilities are roll, +, -, int
         parsed = parse(roll_parts[i+1])
-        total += parsed[0]
         if roll_parts[i] == '-':
+            total += parsed[0]
             output += " - ({})".format(parsed[1])
         else:
+            total -= parsed[0]
             output += " + ({})".format(parsed[1])
 
         i += 2
