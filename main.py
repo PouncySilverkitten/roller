@@ -130,9 +130,9 @@ def assembler(roll_parts):
         parsed = parse(roll_parts[i+1])
         if roll_parts[i] == '-':
             total += parsed[0]
-            output += " - ({})".format(parsed[1])
+            output -= " - ({})".format(parsed[1])
         else:
-            total -= parsed[0]
+            total += parsed[0]
             output += " + ({})".format(parsed[1])
 
         i += 2
