@@ -251,7 +251,7 @@ def main():
                     elif msg.data.content.startswith('!rm '):
                         saved_rolls = get_saved_rolls()
                         try:
-                            del saved_rolls[msg.data.content.split()[1]]
+                            del saved_rolls[msg.data.sender.name][msg.data.content.split()[1]]
                             write_saved_rolls(saved_rolls)
                             roller.reply("Deleted.")
                         except:
