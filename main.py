@@ -16,6 +16,7 @@ class SidesTooHigh(Exception): pass
 class SidesTooLow(Exception): pass
 
 class BadRollSyntax(Exception): pass
+class NoRollGiven(Exception): pass
 
 def get_saved_rolls():
     with open('saved_rolls.json') as f:
@@ -65,13 +66,15 @@ flatten = lambda l: [item for sublist in l for item in sublist]
 
 def lookup(saved_rolls, roll, sender):
     """
-    >>> saved = {'Irinora': {'staff': '2d20+2', 'amulet': '2d10-1'}, 'Verasar Alamelis': {'staff': '4d8+3', 'amulet': '3d6+4'}}
+    >>> saved = {'Irinora': {'staff': '2d20+2', 'amulet': '2d10-1'}, 'Verasar Alamelis': {'staff': '4d8+3', 'amulet': '3d6+4', 'ring': '2d10+d6'}}
     >>> lookup(saved, 'staff', 'Akunusella')
     'staff'
     >>> lookup(saved, 'trinket', 'Vexildah')
     'trinket'
     >>> lookup(saved, 'amulet', 'Verasar Alamelis')
     '3d6+4'
+    >>> lookup(saved, 'ring', 'Verasar Alamelis')
+    '2d10+d6'
     >>> lookup(saved, 'adv', '')
     '2ad20'
     >>> lookup(saved, 'disadv', '')
@@ -90,27 +93,62 @@ def lookup(saved_rolls, roll, sender):
 
 
 def parse(part):
+    """
+    >>> parse('2d1')
+    (2, '1, 1')
+    >>> parse('')
+    Traceback (most recent call last):
+     ...
+    NoRollGiven
+    >>> parse('-1d10')
+    Traceback (most recent call last):
+     ...
+    RollsTooLow
+    >>> parse('1000d10')
+    Traceback (most recent call last):
+     ...
+    RollsTooHigh
+    >>> parse('1d0')
+    Traceback (most recent call last):
+     ...
+    SidesTooLow
+    >>> parse('10d100000')
+    Traceback (most recent call last):
+     ...
+    SidesTooHigh
+    """
+
+    if len(part) == 0:
+        raise NoRollGiven
+    
+    if part[0] == 'd' and part not in ['dd','disadv']:
+        part  = "1"+part
+        
     p = list(filter(None, re.split("a|d", part)))
+    if len(p) == 0:
+        raise NoRollGiven
+        
     # If int
-    try:
-        if 'd' not in part and len(p) == 1: return (int(p[0]), p[0])
+    if p[0].isdigit() and len(p) == 1:
+        return (int(p[0]), p[0])
 
         # If no number of rolls specified
         if len(p) == 1: p = [1, p[0]]
         p = list(map(int, p))
-    except ValueError:
+    elif len(p) == 1:
         raise BadRollSyntax
 
     # Sanity check
     if p == [] or int(p[0]) < 1:
         raise RollsTooLow
-    elif int(p[1]) < 2:
+    elif int(p[1]) < 1:
         raise SidesTooLow
     elif int(p[0]) > 20:
         raise RollsTooHigh
     elif int(p[1]) > 100:
         raise SidesTooHigh
-    rolls = sorted([random.randint(1, p[1]) for _ in range(p[0])])
+
+    rolls = sorted([random.randint(1, int(p[1])) for _ in range(int(p[0]))])
     if 'dd' in part:
         total = rolls[0]
     elif "ad" in part:
@@ -121,25 +159,80 @@ def parse(part):
     return (total, ', '.join([str(r) for r in rolls]),)
 
 def assembler(roll_parts):
+    """ Should return a useable output
+
+    >>> assembler(['1'])
+    '1: 1'
+    >>> assembler(['5d1'])
+    '5: (1, 1, 1, 1, 1)'
+    >>> assembler(['5d1','+','5','-','d1'])
+    '9: (1, 1, 1, 1, 1) + 5 - 1'
+    """
+
     output = "{}: "
     parsed = parse(roll_parts[0])
     total = parsed[0]
-    output += "({})".format(str(parsed[1]))
+    try:
+        parsed = (parsed[0], int(parsed[1]))
+    except ValueError:
+        parsed = (parsed[0], "({})".format(parsed[1]))
+    output += "{}".format(parsed[1])
     i = 1
+    roll_parts = list(filter(None, roll_parts))
     while i < len(roll_parts):
         # Possibilities are roll, +, -, int
         parsed = parse(roll_parts[i+1])
+        try:
+            parsed = (parsed[0], int(parsed[1]))
+        except ValueError:
+            parsed = (parsed[0], "({})".format(parsed[1]))
         if roll_parts[i] == '-':
             total -= parsed[0]
-            output += " - ({})".format(parsed[1])
+            output += " - {}".format(parsed[1])
         else:
             total += parsed[0]
-            output += " + ({})".format(parsed[1])
+            output += " + {}".format(parsed[1])
 
         i += 2
 
     return output.format(total)
 
+def validate_roll(roll):
+    """
+    This returns the result of given rolls, including saved rolls.
+    >>> through_roll('2d1','Verasar Aramelis')
+    '2: (1, 1)'
+    >>> through_roll('2d1+5','Verasar Aramelis')
+    '7: (1, 1) + 5'
+    >>> def get_saved_rolls(): return {"Verasar Aramelis": {"staff": "2d1"}}
+    >>> through_roll('staff', 'Verasar Aramelis')
+    '2: (1, 1)'
+    """
+    frags = sep(roll)
+    assembled = assembler(frags)
+    return assembled
+    
+def through_roll(roll, sender):
+    """
+    This returns the result of given rolls, including saved rolls.
+    >>> through_roll('2d1','Verasar Aramelis')
+    '2: (1, 1)'
+    >>> through_roll('2d1+5','Verasar Aramelis')
+    '7: (1, 1) + 5'
+    >>> def get_saved_rolls(): return {"Verasar Aramelis": {"staff": "2d1"}}
+    >>> through_roll('staff', 'Verasar Aramelis')
+    '2: (1, 1)'
+    >>> through_roll('staff', 'Pouncy Silverkitten')
+    '2: (1, 1)'
+    """
+    frags_not_saved = sep(roll)
+    saved = get_saved_rolls()
+    frags = []
+    for frag in frags_not_saved:
+        frags.append(sep(lookup(saved, frag, sender)))
+    frags = flatten(frags)
+    assembled = assembler(frags)
+    return assembled
 
 roller = karelia.bot('Roller', 'test')
 roller.stock_responses['long_help'] = """I roll dice.
@@ -173,16 +266,12 @@ def main():
                     if msg.data.content.split()[0] in ['!roll', '!r', '/roll', '/r']:
                         reply = ""
                         try:
-                            frags = sep(msg.data.content.split()[1])
-                            saved = get_saved_rolls()
-                            sender = msg.data.sender.name
-                            looked_up = flatten([sep(lookup(saved, frag, sender)) for frag in frags])
-                            reply = assembler(looked_up)
+                            reply = through_roll(msg.data.content.split()[1], msg.data.sender.name)
 
                         except SidesTooHigh:
                             reply = "Sorry, the max number of sides is 100."
                         except SidesTooLow:
-                            reply = "Sorry, your dice must have at least 4 sides."
+                            reply = "Sorry, your dice must have at least 1 side."
 
                         except RollsTooHigh:
                             reply = "Sorry, the max number of rolls is 20."
@@ -191,6 +280,8 @@ def main():
 
                         except BadRollSyntax:
                             reply = "Sorry, couldn't interpret that roll."
+                        except NoRollGiven:
+                            reply = "Sorry, I couldn't see a roll there."
 
                         finally:
                             roller.reply(reply)
@@ -202,11 +293,7 @@ def main():
                             roll_formula = msg.data.content.split()[1]
 
                             try:
-                                frags = sep(roll_formula)
-                                saved = get_saved_rolls()
-                                sender = msg.data.sender.name
-                                looked_up = [lookup(saved, frag, sender) for frag in frags]
-                                assembler(looked_up)
+                                validate_roll(roll_formula)
 
                                 saved_rolls = get_saved_rolls()
                                 roll_cat = msg.data.sender.name
@@ -228,6 +315,8 @@ def main():
 
                             except BadRollSyntax:
                                 reply = "Sorry, couldn't interpret that roll."
+                            except NoRollGiven:
+                                reply = "Sorry, I couldn't see a roll there."
 
                             finally:
                                 roller.reply(reply)
@@ -252,6 +341,8 @@ def main():
                         saved_rolls = get_saved_rolls()
                         try:
                             del saved_rolls[msg.data.sender.name][msg.data.content.split()[1]]
+                            if saved_rolls[msg.data.sender.name] == {}:
+                            	del saved_rolls[msg.data.sender.name]
                             write_saved_rolls(saved_rolls)
                             roller.reply("Deleted.")
                         except:
@@ -266,5 +357,5 @@ def main():
             time.sleep(1)
 
 if __name__ == "__main__":
-    #doctest.testmod()
+    doctest.testmod()
     main()
